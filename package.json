@@ -1,0 +1,27 @@
+{
+  "name": "serverless-ai-content-pipe",
+  "version": "0.1.0",
+  "bin": {
+    "serverless-ai-content-pipe": "bin/serverless-ai-content-pipe.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "aws-cdk": "2.1025.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.212.0",
+    "constructs": "^10.0.0"
+  }
+}
