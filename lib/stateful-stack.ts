@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
-import * as s3 from "aws-cdk-lib/aws-s3"; // <-- Add this import
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 
 export class AiContentPipeStatefulStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -14,6 +15,19 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
     new cdk.CfnOutput(this, "BucketName", {
       value: bucket.bucketName,
       description: "S3 bucket name",
+    });
+
+    const multiSecret = new secretsmanager.Secret(this, "ContentPipeSecrets", {
+      description: "A secret containing multiple values as JSON",
+      secretObjectValue: {
+        newsApiKey: cdk.SecretValue.unsafePlainText("your-api-key"),
+        // Add more keys as needed
+      },
+    });
+
+    new cdk.CfnOutput(this, "MultiSecretArn", {
+      value: multiSecret.secretArn,
+      description: "ARN for multi-value secret",
     });
   }
 }
