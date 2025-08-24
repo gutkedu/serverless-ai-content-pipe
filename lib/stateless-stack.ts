@@ -5,7 +5,7 @@ import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as path from "path";
 import * as nodeLambda from "aws-cdk-lib/aws-lambda-nodejs";
 
-export class ServerlessAiContentPipeStack extends cdk.Stack {
+export class AiContentPipeStatelessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
