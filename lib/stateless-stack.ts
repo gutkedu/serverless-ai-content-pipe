@@ -4,55 +4,66 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as path from "path";
 import * as nodeLambda from "aws-cdk-lib/aws-lambda-nodejs";
+import { OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // Create the Lambda function using esbuild bundling
-    const helloWorld = new nodeLambda.NodejsFunction(
+    const nodejsDepsLambdaLayer = new lambda.LayerVersion(
       this,
-      "HelloWorldFunction",
+      "NodejsDepsLambdaLayer",
       {
-        runtime: lambda.Runtime.NODEJS_20_X,
-        handler: "handler",
-        entry: path.join(__dirname, "../code/nodejs/src/hello-world/index.ts"),
+        code: lambda.Code.fromAsset("code/nodejs/layers/nodejs-deps"),
+        compatibleRuntimes: [
+          lambda.Runtime.NODEJS_20_X,
+          lambda.Runtime.NODEJS_22_X,
+        ],
+        description: "Node.js dependencies layer",
+      }
+    );
+
+    const fetchNewsScheduled = new nodeLambda.NodejsFunction(
+      this,
+      "FetchNewsScheduledFunction",
+      {
+        runtime: lambda.Runtime.NODEJS_22_X,
+        layers: [
+          nodejsDepsLambdaLayer,
+          lambda.LayerVersion.fromLayerVersionArn(
+            this,
+            "PowertoolsTypeScriptLayer",
+            "arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:34"
+          ),
+        ],
+        handler: "fetchNewsScheduledHandler",
+        entry: path.join(
+          __dirname,
+          "../code/nodejs/src/lambdas/fetch-news-scheduled.ts"
+        ),
         architecture: lambda.Architecture.ARM_64,
         memorySize: 128,
         timeout: cdk.Duration.seconds(30),
         bundling: {
           minify: true,
           sourceMap: true,
-          externalModules: ["aws-sdk"],
+          //externalModules: ["aws-sdk"],
+          format: OutputFormat.ESM,
         },
         environment: {
-          POWERTOOLS_SERVICE_NAME: "hello-world",
+          POWERTOOLS_SERVICE_NAME: "fetch-news-scheduled",
+          CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue(
+            "ContentPipeSecretsName"
+          ),
         },
       }
     );
-
-    // Create the API Gateway
-    const api = new apigateway.RestApi(this, "HelloWorldApi", {
-      restApiName: "Hello World API",
-      description: "Simple API Gateway with Lambda integration",
-      deployOptions: {
-        stageName: "dev",
-      },
-      // Enable CORS
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-      },
-    });
-
-    // Create an API Gateway resource and method
-    const helloWorldIntegration = new apigateway.LambdaIntegration(helloWorld);
-    api.root.addMethod("GET", helloWorldIntegration);
-
-    // Output the API Gateway URL
-    new cdk.CfnOutput(this, "ApiUrl", {
-      value: api.url,
-      description: "API Gateway endpoint URL",
-    });
+    // Grant permission to read ContentPipeSecrets from Secrets Manager
+    fetchNewsScheduled.addToRolePolicy(
+      new cdk.aws_iam.PolicyStatement({
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: ["arn:aws:secretsmanager:*:*:secret:ContentPipeSecrets*"],
+      })
+    );
   }
 }

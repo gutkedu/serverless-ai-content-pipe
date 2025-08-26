@@ -29,5 +29,11 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
       value: multiSecret.secretArn,
       description: "ARN for multi-value secret",
     });
+
+    new cdk.CfnOutput(this, "MultiSecretName", {
+      value: multiSecret.secretName,
+      exportName: "ContentPipeSecretsName",
+      description: "Name for multi-value secret",
+    });
   }
 }
