@@ -27,6 +27,8 @@ Configure a scheduled event (using Amazon EventBridge or similar) to trigger you
 ## Phase 2: Context Pipeline (RAG)
 Here, you will transform raw data into a knowledge base for the AI model.
 
+doc: https://www.pinecone.io/blog/amazon-bedrock-integration/
+
 **Objective**: Generate vector representations (embeddings) of collected data for context queries.
 
 ### Step 2.1: Configure Vector Database
