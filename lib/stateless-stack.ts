@@ -7,12 +7,15 @@ import * as nodeLambda from "aws-cdk-lib/aws-lambda-nodejs";
 import * as events from "aws-cdk-lib/aws-events";
 import * as scheduler from "aws-cdk-lib/aws-scheduler";
 import { OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
-import { arch } from "os";
+import * as iam from "aws-cdk-lib/aws-iam";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    /**
+     * Lambda Layers
+     */
     const nodejsDepsLambdaLayer = new lambda.LayerVersion(
       this,
       "NodejsDepsLambdaLayer",
@@ -26,6 +29,9 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       }
     );
 
+    /**
+     * Global Lambda configurations
+     */
     const globalLambdaConfigs = {
       environment: {
         CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue("ContentPipeSecretsName"),
@@ -47,6 +53,10 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       ],
     };
 
+    /**
+     * LAMBDAS
+     */
+
     const fetchNewsScheduled = new nodeLambda.NodejsFunction(
       this,
       "FetchNewsScheduledFunction",
@@ -66,21 +76,29 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       }
     );
 
-    fetchNewsScheduled.addToRolePolicy(
-      new cdk.aws_iam.PolicyStatement({
-        actions: [
-          "secretsmanager:GetSecretValue",
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:PutObject",
-        ],
-        resources: [
-          "arn:aws:secretsmanager:*:*:secret:ContentPipeSecrets*",
-          `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}`,
-          `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}/*`,
-        ],
-      })
-    );
+    if (fetchNewsScheduled.role) {
+      (fetchNewsScheduled.role as iam.Role).assumeRolePolicy?.addStatements(
+        new iam.PolicyStatement({
+          principals: [new iam.ServicePrincipal("scheduler.amazonaws.com")],
+          actions: ["sts:AssumeRole"],
+        })
+      );
+      fetchNewsScheduled.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            "secretsmanager:GetSecretValue",
+            "s3:GetObject",
+            "s3:ListBucket",
+            "s3:PutObject",
+          ],
+          resources: [
+            "arn:aws:secretsmanager:*:*:secret:ContentPipeSecrets*",
+            `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}`,
+            `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}/*`,
+          ],
+        })
+      );
+    }
 
     new scheduler.CfnSchedule(this, "FetchNewsSchedule", {
       flexibleTimeWindow: { mode: "OFF" },
@@ -88,6 +106,11 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       target: {
         arn: fetchNewsScheduled.functionArn,
         roleArn: fetchNewsScheduled.role!.roleArn,
+        input: JSON.stringify({
+          topic: "Artificial Intelligence",
+          page: 1,
+          pageSize: 10,
+        }),
       },
       name: "FetchNewsScheduledEvent",
       description: "Triggers fetch-news-scheduled Lambda",
