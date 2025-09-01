@@ -4,7 +4,10 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as path from "path";
 import * as nodeLambda from "aws-cdk-lib/aws-lambda-nodejs";
+import * as events from "aws-cdk-lib/aws-events";
+import * as scheduler from "aws-cdk-lib/aws-scheduler";
 import { OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
+import { arch } from "os";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -23,47 +26,71 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       }
     );
 
+    const globalLambdaConfigs = {
+      environment: {
+        CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue("ContentPipeSecretsName"),
+        BUCKET_NAME: cdk.Fn.importValue("ContentPipeBucketName"),
+        EVENT_BUS_NAME: cdk.Fn.importValue("ContentPipeEventBusName"),
+        POWERTOOLS_SERVICE_NAME: "ai-content-pipe",
+      },
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      timeout: cdk.Duration.seconds(30),
+      layers: [
+        nodejsDepsLambdaLayer,
+        lambda.LayerVersion.fromLayerVersionArn(
+          this,
+          "PowertoolsTypeScriptLayer",
+          "arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:34"
+        ),
+      ],
+    };
+
     const fetchNewsScheduled = new nodeLambda.NodejsFunction(
       this,
       "FetchNewsScheduledFunction",
       {
-        runtime: lambda.Runtime.NODEJS_22_X,
-        layers: [
-          nodejsDepsLambdaLayer,
-          lambda.LayerVersion.fromLayerVersionArn(
-            this,
-            "PowertoolsTypeScriptLayer",
-            "arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:34"
-          ),
-        ],
         handler: "fetchNewsScheduledHandler",
         entry: path.join(
           __dirname,
           "../code/nodejs/src/lambdas/fetch-news-scheduled.ts"
         ),
-        architecture: lambda.Architecture.ARM_64,
-        memorySize: 128,
-        timeout: cdk.Duration.seconds(30),
+        ...globalLambdaConfigs,
         bundling: {
           minify: true,
           sourceMap: true,
           //externalModules: ["aws-sdk"],
           format: OutputFormat.ESM,
         },
-        environment: {
-          POWERTOOLS_SERVICE_NAME: "fetch-news-scheduled",
-          CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue(
-            "ContentPipeSecretsName"
-          ),
-        },
       }
     );
-    // Grant permission to read ContentPipeSecrets from Secrets Manager
+
     fetchNewsScheduled.addToRolePolicy(
       new cdk.aws_iam.PolicyStatement({
-        actions: ["secretsmanager:GetSecretValue"],
-        resources: ["arn:aws:secretsmanager:*:*:secret:ContentPipeSecrets*"],
+        actions: [
+          "secretsmanager:GetSecretValue",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:PutObject",
+        ],
+        resources: [
+          "arn:aws:secretsmanager:*:*:secret:ContentPipeSecrets*",
+          `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}`,
+          `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}/*`,
+        ],
       })
     );
+
+    new scheduler.CfnSchedule(this, "FetchNewsSchedule", {
+      flexibleTimeWindow: { mode: "OFF" },
+      scheduleExpression: "rate(1 hour)", // or cron(...)
+      target: {
+        arn: fetchNewsScheduled.functionArn,
+        roleArn: fetchNewsScheduled.role!.roleArn,
+      },
+      name: "FetchNewsScheduledEvent",
+      description: "Triggers fetch-news-scheduled Lambda",
+    });
   }
 }

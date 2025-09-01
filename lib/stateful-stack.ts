@@ -7,6 +7,16 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    const eventBus = new cdk.aws_events.EventBus(this, "ContentPipeEventBus", {
+      eventBusName: "ContentPipeEventBus",
+    });
+
+    new cdk.CfnOutput(this, "EventBusName", {
+      value: eventBus.eventBusName,
+      description: "Event bus name",
+      exportName: "ContentPipeEventBusName",
+    });
+
     const bucket = new s3.Bucket(this, "ContentPipeBucket", {
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Not for production!
       autoDeleteObjects: true, // Not for production!
@@ -15,6 +25,7 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
     new cdk.CfnOutput(this, "BucketName", {
       value: bucket.bucketName,
       description: "S3 bucket name",
+      exportName: "ContentPipeBucketName",
     });
 
     const multiSecret = new secretsmanager.Secret(this, "ContentPipeSecrets", {

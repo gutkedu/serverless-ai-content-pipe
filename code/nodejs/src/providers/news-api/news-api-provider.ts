@@ -14,10 +14,11 @@ const logger = getLogger()
 
 export class NewsApiProvider implements NewsProvider {
   private readonly baseUrl: string
-  private readonly apiKey: string = process.env.NEWS_API_KEY || ''
+  private readonly apiKey: string
 
-  constructor() {
+  constructor(apikey: string) {
     this.baseUrl = 'https://newsapi.org/v2'
+    this.apiKey = apikey
     if (!this.apiKey) {
       throw new IntegrationError('News API key is not set', {
         service: 'news-api'
