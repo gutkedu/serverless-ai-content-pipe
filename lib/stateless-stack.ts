@@ -8,6 +8,7 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as scheduler from "aws-cdk-lib/aws-scheduler";
 import { OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { StatefulStackExportsEnum } from "./enums/exports-enum";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -34,9 +35,9 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
      */
     const globalLambdaConfigs = {
       environment: {
-        CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue("ContentPipeSecretsName"),
-        BUCKET_NAME: cdk.Fn.importValue("ContentPipeBucketName"),
-        EVENT_BUS_NAME: cdk.Fn.importValue("ContentPipeEventBusName"),
+        CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.SECRETS),
+        BUCKET_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.MAIN_BUCKET),
+        EVENT_BUS_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.EVENT_BUS),
         POWERTOOLS_SERVICE_NAME: "ai-content-pipe",
       },
       runtime: lambda.Runtime.NODEJS_22_X,
