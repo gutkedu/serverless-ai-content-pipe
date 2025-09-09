@@ -31,10 +31,7 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
 
     const multiSecret = new secretsmanager.Secret(this, "ContentPipeSecrets", {
       description: "A secret containing multiple values as JSON",
-      secretObjectValue: {
-        newsApiKey: cdk.SecretValue.unsafePlainText("your-api-key"),
-        // Add more keys as needed
-      },
+      secretObjectValue: undefined, // refer to SecretsEnums
     });
 
     new cdk.CfnOutput(this, "MultiSecretArn", {
