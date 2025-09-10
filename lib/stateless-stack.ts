@@ -21,7 +21,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       this,
       "NodejsDepsLambdaLayer",
       {
-        code: lambda.Code.fromAsset("code/nodejs/layers/nodejs-deps"),
+        code: lambda.Code.fromAsset("code/nodejs/layers/deps"),
         compatibleRuntimes: [
           lambda.Runtime.NODEJS_20_X,
           lambda.Runtime.NODEJS_22_X,
@@ -35,7 +35,9 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
      */
     const globalLambdaConfigs = {
       environment: {
-        CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.SECRETS),
+        CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue(
+          StatefulStackExportsEnum.SECRETS
+        ),
         BUCKET_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.MAIN_BUCKET),
         EVENT_BUS_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.EVENT_BUS),
         POWERTOOLS_SERVICE_NAME: "ai-content-pipe",
@@ -101,20 +103,37 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       );
     }
 
-    new scheduler.CfnSchedule(this, "FetchNewsSchedule", {
-      flexibleTimeWindow: { mode: "OFF" },
-      scheduleExpression: "rate(1 hour)", // or cron(...)
-      target: {
-        arn: fetchNewsScheduled.functionArn,
-        roleArn: fetchNewsScheduled.role!.roleArn,
-        input: JSON.stringify({
-          topic: "Artificial Intelligence",
-          page: 1,
-          pageSize: 10,
-        }),
-      },
-      name: "FetchNewsScheduledEvent",
-      description: "Triggers fetch-news-scheduled Lambda",
-    });
+    const createPineconeIndex = new nodeLambda.NodejsFunction(
+      this,
+      "CreatePineconeIndexFunction",
+      {
+        handler: "createPineconeIndexHandler",
+        entry: path.join(
+          __dirname,
+          "../code/nodejs/src/lambdas/infra/create-pinecone-index.ts"
+        ),
+        ...globalLambdaConfigs,
+        environment: {
+          PINECONE_SECRET: cdk.Fn.importValue(
+            StatefulStackExportsEnum.PINECONE_SECRET
+          ),
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          format: OutputFormat.CJS,
+          externalModules: ["@pinecone-database/pinecone"],
+        },
+      }
+    );
+
+    if (createPineconeIndex.role) {
+      createPineconeIndex.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["secretsmanager:GetSecretValue"],
+          resources: ["arn:aws:secretsmanager:*:*:secret:PineconeSecret*"],
+        })
+      );
+    }
   }
 }

@@ -31,18 +31,23 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
 
     const multiSecret = new secretsmanager.Secret(this, "ContentPipeSecrets", {
       description: "A secret containing multiple values as JSON",
-      secretObjectValue: undefined, // refer to SecretsEnums
-    });
-
-    new cdk.CfnOutput(this, "MultiSecretArn", {
-      value: multiSecret.secretArn,
-      description: "ARN for multi-value secret",
+      // refer to SecretsEnums
     });
 
     new cdk.CfnOutput(this, "MultiSecretName", {
       value: multiSecret.secretName,
       description: "Name for multi-value secret",
       exportName: StatefulStackExportsEnum.SECRETS,
+    });
+
+    const pineconeSecret = new secretsmanager.Secret(this, "PineconeSecret", {
+      description: "Pinecone API key for vector database",
+    });
+
+    new cdk.CfnOutput(this, "PineconeSecretName", {
+      value: pineconeSecret.secretName,
+      description: "Name for Pinecone secret",
+      exportName: StatefulStackExportsEnum.PINECONE_SECRET,
     });
   }
 }
