@@ -135,5 +135,42 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         })
       );
     }
+
+    /**
+     * EventBridge Scheduler for Fetch News Lambda
+     */
+    // Create a dedicated role for EventBridge Scheduler
+    const schedulerRole = new iam.Role(this, "SchedulerExecutionRole", {
+      assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
+      description: "Role for EventBridge Scheduler to invoke Lambda",
+    });
+
+    schedulerRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: [fetchNewsScheduled.functionArn],
+      })
+    );
+
+    const fetchNewsSchedule = new scheduler.CfnSchedule(
+      this,
+      "FetchNewsSchedule",
+      {
+        flexibleTimeWindow: { mode: "OFF" },
+        scheduleExpression: "rate(24 hours)", 
+        target: {
+          arn: fetchNewsScheduled.functionArn,
+          roleArn: schedulerRole.roleArn,
+          input: JSON.stringify({
+            topic: "Artificial Intelligence",
+            page: 1,
+            pageSize: 10,
+          }),
+        },
+        name: "FetchNewsScheduledEvent",
+        description: "Triggers fetch-news-scheduled",
+        state: "ENABLED",
+      }
+    );
   }
 }

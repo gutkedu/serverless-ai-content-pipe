@@ -19,7 +19,7 @@ const secretsJson: SecretParams = (await getSecret(
   process.env.CONTENT_PIPE_SECRETS_NAME as string,
   {
     transform: 'json',
-    maxAge: 300
+    maxAge: 15 * 60 // 15 minutes
   }
 )) as SecretParams
 
