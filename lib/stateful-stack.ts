@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import { StatefulStackExportsEnum } from "./enums/exports-enum";
 
 export class AiContentPipeStatefulStack extends cdk.Stack {
@@ -29,25 +29,32 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
       exportName: StatefulStackExportsEnum.MAIN_BUCKET,
     });
 
-    const multiSecret = new secretsmanager.Secret(this, "ContentPipeSecrets", {
-      description: "A secret containing multiple values as JSON",
-      // refer to SecretsEnums
+    const newsApiKeyParam = new ssm.StringParameter(this, "NewsApiKeyParam", {
+      parameterName: "/ai-content-pipe/news-api-key",
+      stringValue: "replace-with-your-news-api-key",
+      description: "News API key for fetching articles",
     });
 
-    new cdk.CfnOutput(this, "MultiSecretName", {
-      value: multiSecret.secretName,
-      description: "Name for multi-value secret",
-      exportName: StatefulStackExportsEnum.SECRETS,
+    const pineconeApiKeyParam = new ssm.StringParameter(
+      this,
+      "PineconeApiKeyParam",
+      {
+        parameterName: "/ai-content-pipe/pinecone-api-key",
+        stringValue: "your-pinecone-api-key-here", // Replace with actual key
+        description: "Pinecone API key for vector database",
+      }
+    );
+
+    new cdk.CfnOutput(this, "NewsApiKeyParamName", {
+      value: newsApiKeyParam.parameterName,
+      exportName: StatefulStackExportsEnum.NEWS_API_KEY_PARAM,
+      description: "SSM Parameter name for News API key",
     });
 
-    const pineconeSecret = new secretsmanager.Secret(this, "PineconeSecret", {
-      description: "Pinecone API key for vector database",
-    });
-
-    new cdk.CfnOutput(this, "PineconeSecretName", {
-      value: pineconeSecret.secretName,
-      description: "Name for Pinecone secret",
-      exportName: StatefulStackExportsEnum.PINECONE_SECRET,
+    new cdk.CfnOutput(this, "PineconeApiKeyParamName", {
+      value: pineconeApiKeyParam.parameterName,
+      exportName: StatefulStackExportsEnum.PINECONE_API_KEY_PARAM,
+      description: "SSM Parameter name for Pinecone API key",
     });
   }
 }

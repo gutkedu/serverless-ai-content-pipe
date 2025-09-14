@@ -1,5 +1,5 @@
 import { Pinecone } from '@pinecone-database/pinecone'
-import { getSecret } from '@aws-lambda-powertools/parameters/secrets'
+import { getParameter } from '@aws-lambda-powertools/parameters/ssm'
 import { getLogger } from '@/shared/logger/get-logger.js'
 import { Context, Handler } from 'aws-lambda'
 
@@ -12,14 +12,21 @@ export const createPineconeIndexHandler: Handler = async (
   try {
     logger.addContext(context)
 
-    const secret = await getSecret(process.env.PINECONE_SECRET as string)
-    if (!secret) {
-      logger.error('Pinecone API key not found in secrets manager')
-      throw new Error('Pinecone API key not found in secrets manager')
+    const pineconeApiKey = await getParameter(
+      process.env.PINECONE_API_KEY_PARAM as string,
+      {
+        decrypt: true,
+        maxAge: 15 * 60 // 15 minutes cache
+      }
+    )
+
+    if (!pineconeApiKey) {
+      logger.error('Pinecone API key not found in SSM Parameter Store')
+      throw new Error('Pinecone API key not found in SSM Parameter Store')
     }
 
     const pinecone = new Pinecone({
-      apiKey: secret as string
+      apiKey: pineconeApiKey as string
     })
 
     const indexName = 'ai-content-pipe'

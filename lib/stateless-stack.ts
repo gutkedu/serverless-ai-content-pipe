@@ -8,6 +8,8 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as scheduler from "aws-cdk-lib/aws-scheduler";
 import { OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import { StatefulStackExportsEnum } from "./enums/exports-enum";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
@@ -35,8 +37,11 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
      */
     const globalLambdaConfigs = {
       environment: {
-        CONTENT_PIPE_SECRETS_NAME: cdk.Fn.importValue(
-          StatefulStackExportsEnum.SECRETS
+        NEWS_API_KEY_PARAM: cdk.Fn.importValue(
+          StatefulStackExportsEnum.NEWS_API_KEY_PARAM
+        ),
+        PINECONE_API_KEY_PARAM: cdk.Fn.importValue(
+          StatefulStackExportsEnum.PINECONE_API_KEY_PARAM
         ),
         BUCKET_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.MAIN_BUCKET),
         EVENT_BUS_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.EVENT_BUS),
@@ -89,13 +94,15 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       fetchNewsScheduled.addToRolePolicy(
         new iam.PolicyStatement({
           actions: [
-            "secretsmanager:GetSecretValue",
+            "ssm:GetParameter",
+            "kms:Decrypt",
             "s3:GetObject",
             "s3:ListBucket",
             "s3:PutObject",
           ],
           resources: [
-            "arn:aws:secretsmanager:*:*:secret:ContentPipeSecrets*",
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/news-api-key",
+            "arn:aws:kms:*:*:key/*",
             `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}`,
             `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}/*`,
           ],
@@ -114,9 +121,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         ),
         ...globalLambdaConfigs,
         environment: {
-          PINECONE_SECRET: cdk.Fn.importValue(
-            StatefulStackExportsEnum.PINECONE_SECRET
-          ),
+          ...globalLambdaConfigs.environment,
         },
         bundling: {
           minify: true,
@@ -130,8 +135,11 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
     if (createPineconeIndex.role) {
       createPineconeIndex.addToRolePolicy(
         new iam.PolicyStatement({
-          actions: ["secretsmanager:GetSecretValue"],
-          resources: ["arn:aws:secretsmanager:*:*:secret:PineconeSecret*"],
+          actions: ["ssm:GetParameter", "kms:Decrypt"],
+          resources: [
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/pinecone-api-key",
+            "arn:aws:kms:*:*:key/*",
+          ],
         })
       );
     }
@@ -157,7 +165,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       "FetchNewsSchedule",
       {
         flexibleTimeWindow: { mode: "OFF" },
-        scheduleExpression: "rate(24 hours)", 
+        scheduleExpression: "rate(24 hours)",
         target: {
           arn: fetchNewsScheduled.functionArn,
           roleArn: schedulerRole.roleArn,

@@ -1,6 +1,6 @@
 export enum StatefulStackExportsEnum {
   EVENT_BUS = "ContentPipeEventBusName",
   MAIN_BUCKET = "ContentPipeBucketName",
-  SECRETS = "ContentPipeSecretsName",
-  PINECONE_SECRET = "PineconeSecretName",
+  NEWS_API_KEY_PARAM = "NewsApiKeyParamName",
+  PINECONE_API_KEY_PARAM = "PineconeApiKeyParamName",
 }

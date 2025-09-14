@@ -1,7 +1,6 @@
 import { getLogger } from '@/shared/logger/get-logger.js'
-import { SecretParams, SecretsEnums } from '@/shared/secrets/secrets-dtos.js'
 import { makeFetchNews } from '@/use-cases/factories/make-fetch-news.js'
-import { getSecret } from '@aws-lambda-powertools/parameters/secrets'
+import { getParameter } from '@aws-lambda-powertools/parameters/ssm'
 import { Context } from 'aws-lambda'
 import { z } from 'zod'
 
@@ -13,19 +12,19 @@ const schema = z.object({
   pageSize: z.number().min(1).max(100).default(10)
 })
 
-type EventDetail = z.infer<typeof schema>
-
-const secretsJson: SecretParams = (await getSecret(
-  process.env.CONTENT_PIPE_SECRETS_NAME as string,
+const newsApiKey = await getParameter(
+  process.env.NEWS_API_KEY_PARAM as string,
   {
-    transform: 'json',
-    maxAge: 15 * 60 // 15 minutes
+    decrypt: true,
+    maxAge: 15 * 60 // 15 minutes cache
   }
-)) as SecretParams
+)
 
 const useCase = makeFetchNews({
-  newsApiKey: secretsJson[SecretsEnums.NEWS_API_KEY]
+  newsApiKey: newsApiKey as string
 })
+
+type EventDetail = z.infer<typeof schema>
 
 export const fetchNewsScheduledHandler = async (
   event: EventDetail,

@@ -3,7 +3,6 @@ export enum ParametersEnums {
   PINECONE_API_KEY = '/ai-content-pipe/pinecone-api-key'
 }
 
-// SSM Parameter interface for type safety
 export interface ParameterConfig {
   name: string
   decrypt?: boolean
