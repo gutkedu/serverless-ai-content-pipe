@@ -6,6 +6,7 @@ import {
 import { getLogger } from '@/shared/logger/get-logger.js'
 import { IntegrationError } from '@/shared/errors/integration-error.js'
 import { AIProvider } from './ai-provider.js'
+import { TitanEmbeddingResponse } from './ai-provider-dtos.js'
 
 const logger = getLogger()
 
@@ -73,6 +74,41 @@ export class BedrockProvider implements AIProvider {
         service: 'bedrock',
         details: message
       })
+    }
+  }
+
+  async generateBedrockEmbedding(text: string): Promise<number[]> {
+    try {
+      const command = new InvokeModelCommand({
+        modelId: 'amazon.titan-embed-text-v1',
+        contentType: 'application/json',
+        accept: 'application/json',
+        body: JSON.stringify({
+          inputText: text
+        })
+      })
+
+      const response = await this.client.send(command)
+
+      if (!response.body) {
+        throw new Error('No response body from Bedrock')
+      }
+
+      const responseBody = JSON.parse(
+        new TextDecoder().decode(response.body)
+      ) as TitanEmbeddingResponse
+
+      if (!responseBody.embedding) {
+        throw new Error('No embedding in Bedrock response')
+      }
+
+      return responseBody.embedding
+    } catch (error) {
+      logger.error('Error generating Bedrock embedding', {
+        error,
+        textLength: text.length
+      })
+      throw new IntegrationError('Failed to generate embedding from Bedrock')
     }
   }
 }

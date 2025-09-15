@@ -1,3 +1,4 @@
 export interface BucketProvider {
-  uploadJson(data: string, filename: string): Promise<void>
+  uploadJson(data: unknown, filename: string): Promise<void>
+  getObject(key: string): Promise<string>
 }

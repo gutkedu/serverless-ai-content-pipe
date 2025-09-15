@@ -1,6 +1,6 @@
 import { s3 } from '@/shared/clients/s3.js'
 import { BucketProvider } from './bucket-provider.js'
-import { PutObjectCommand } from '@aws-sdk/client-s3'
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { IntegrationError } from '@/shared/errors/integration-error.js'
 import { getLogger } from '@/shared/logger/get-logger.js'
 
@@ -13,8 +13,38 @@ export class S3BucketProvider implements BucketProvider {
   constructor() {
     this.bucketName = process.env.BUCKET_NAME || ''
   }
+  async getObject(key: string): Promise<string> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key
+      })
 
-  async uploadJson(data: string, filename: string): Promise<void> {
+      const response = await this.s3Client.send(command)
+
+      if (!response.Body) {
+        throw new IntegrationError('S3 object body is empty', {
+          service: 's3',
+          details: `No body found for object with key: ${key}`
+        })
+      }
+
+      const bytes = await response.Body.transformToString()
+      return bytes
+    } catch (error) {
+      logger.error({
+        message: 'Failed to get object from S3',
+        error,
+        key
+      })
+      throw new IntegrationError('Failed to get object from S3', {
+        service: 's3',
+        details: (error as Error).message
+      })
+    }
+  }
+
+  async uploadJson(data: unknown, filename: string): Promise<void> {
     try {
       const command = new PutObjectCommand({
         Bucket: this.bucketName,

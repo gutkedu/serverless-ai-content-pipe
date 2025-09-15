@@ -21,6 +21,12 @@ export class FetchNewsUseCase {
     pageSize,
     topic
   }: FetchNewsUseCaseRequest): Promise<void> {
+    logger.info('Requesting news with parameters', {
+      topic,
+      page,
+      pageSize
+    })
+
     const news = await this.newsProvider.searchNews({
       q: topic,
       page,
@@ -28,13 +34,23 @@ export class FetchNewsUseCase {
       sortBy: 'relevancy'
     })
 
-    logger.info('Fetched news articles', { news })
+    logger.info('Fetched news articles', {
+      requestedPageSize: pageSize,
+      actualArticleCount: news.articles.length,
+      totalResults: news.totalResults,
+      status: news.status
+    })
+
+    const limitedArticles = news.articles.slice(0, pageSize)
 
     await this.bucketProvider.uploadJson(
-      JSON.stringify(news.articles),
+      limitedArticles,
       `news-${Date.now()}.json`
     )
 
-    logger.info('Uploaded news articles to bucket')
+    logger.info('Uploaded news articles to bucket', {
+      uploadedCount: limitedArticles.length,
+      originalCount: news.articles.length
+    })
   }
 }

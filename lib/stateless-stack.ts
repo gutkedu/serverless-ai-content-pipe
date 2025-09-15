@@ -10,6 +10,7 @@ import { OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
+import { S3EventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { StatefulStackExportsEnum } from "./enums/exports-enum";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
@@ -139,6 +140,79 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
           resources: [
             "arn:aws:ssm:*:*:parameter/ai-content-pipe/pinecone-api-key",
             "arn:aws:kms:*:*:key/*",
+          ],
+        })
+      );
+    }
+
+    const processNewsEmbeddings = new nodeLambda.NodejsFunction(
+      this,
+      "ProcessNewsEmbeddingsFunction",
+      {
+        handler: "processNewsRagHandler",
+        entry: path.join(
+          __dirname,
+          "../code/nodejs/src/lambdas/process-news-embeddings.ts"
+        ),
+        events: [], // refer below
+        ...globalLambdaConfigs,
+        memorySize: 1024,
+        timeout: cdk.Duration.minutes(5),
+        environment: {
+          ...globalLambdaConfigs.environment,
+        },
+
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          format: OutputFormat.CJS,
+          externalModules: ["@pinecone-database/pinecone"],
+        },
+      }
+    );
+
+    // Add S3 event source to trigger the Lambda
+    const mainBucket = s3.Bucket.fromBucketName(
+      this,
+      "MainBucket",
+      cdk.Fn.importValue(StatefulStackExportsEnum.MAIN_BUCKET)
+    );
+
+    processNewsEmbeddings.addEventSource(
+      new S3EventSource(mainBucket as s3.Bucket, {
+        events: [s3.EventType.OBJECT_CREATED],
+        filters: [
+          {
+            prefix: "news-",
+            suffix: ".json",
+          },
+        ],
+      })
+    );
+
+    if (processNewsEmbeddings.role) {
+      processNewsEmbeddings.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter", "kms:Decrypt", "s3:GetObject"],
+          resources: [
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/pinecone-api-key",
+            "arn:aws:kms:*:*:key/*",
+            `arn:aws:s3:::${globalLambdaConfigs.environment.BUCKET_NAME}/*`,
+          ],
+        })
+      );
+
+      // Bedrock permissions - separate policy for clarity
+      processNewsEmbeddings.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            "bedrock:InvokeModel",
+            "bedrock:GetFoundationModel",
+            "bedrock:ListFoundationModels",
+          ],
+          resources: [
+            "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1",
+            "arn:aws:bedrock:us-east-1::foundation-model/*", // Allow other models if needed
           ],
         })
       );

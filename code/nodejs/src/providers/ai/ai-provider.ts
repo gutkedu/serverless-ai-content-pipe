@@ -5,4 +5,5 @@ export interface AIProvider {
    * @returns A promise that resolves to the generated response.
    */
   generateResponse(prompt: string): Promise<string>
+  generateBedrockEmbedding(text: string): Promise<number[]>
 }
