@@ -149,7 +149,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       this,
       "ProcessNewsEmbeddingsFunction",
       {
-        handler: "processNewsRagHandler",
+        handler: "processNewsEmbeddingsHandler",
         entry: path.join(
           __dirname,
           "../code/nodejs/src/lambdas/process-news-embeddings.ts"

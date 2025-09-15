@@ -5,9 +5,10 @@ import { makeProcessNewsEmbeddings } from '@/use-cases/factories/make-process-ne
 
 const logger = getLogger()
 
-const useCase = makeProcessNewsEmbeddings()
-
-export const processNewsRagHandler: S3Handler = async (event, context) => {
+export const processNewsEmbeddingsHandler: S3Handler = async (
+  event,
+  context
+) => {
   try {
     logger.addContext(context)
     logger.info('Processing news for RAG', {
@@ -29,6 +30,8 @@ export const processNewsRagHandler: S3Handler = async (event, context) => {
       throw new Error(errorMessage)
     }
 
+    const useCase = makeProcessNewsEmbeddings(pineconeApiKey)
+
     const results = []
     for (let i = 0; i < event.Records.length; i++) {
       const record = event.Records[i]
@@ -44,8 +47,7 @@ export const processNewsRagHandler: S3Handler = async (event, context) => {
         })
 
         await useCase.execute({
-          objectKey: key,
-          pineconeApiKey
+          objectKey: key
         })
 
         logger.info('Successfully processed S3 record', { bucket, key })
@@ -87,10 +89,6 @@ export const processNewsRagHandler: S3Handler = async (event, context) => {
   } catch (globalError) {
     logger.error('Global error in RAG processing', {
       error: globalError,
-      errorMessage:
-        globalError instanceof Error
-          ? globalError.message
-          : 'Unknown global error',
       requestId: context.awsRequestId
     })
     throw globalError

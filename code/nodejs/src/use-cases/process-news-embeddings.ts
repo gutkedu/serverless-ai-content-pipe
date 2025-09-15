@@ -1,40 +1,24 @@
 import { AIProvider } from '@/providers/ai/ai-provider.js'
 import { BucketProvider } from '@/providers/bucket/bucket-provider.js'
 import { NewsArticle } from '@/providers/news-api/news-api-dto.js'
+import { VectorRecord } from '@/repositories/types/vector-repository-dto.js'
+import { VectorRepository } from '@/repositories/vector-repository.js'
 import { getLogger } from '@/shared/logger/get-logger.js'
-import { Pinecone } from '@pinecone-database/pinecone'
 
 const logger = getLogger()
 
-type Vector = {
-  id: string
-  values: number[]
-  metadata: {
-    title: string
-    url: string
-    publishedAt: string
-    source: string
-    content: string
-  }
-}
-
-type Vectors = Vector[]
-
 export interface ProcessNewsEmbeddingsRequest {
   objectKey: string
-  pineconeApiKey: string
 }
 
 export class ProcessNewsEmbeddingsUseCase {
   constructor(
     private readonly aiProvider: AIProvider,
-    private readonly bucketProvider: BucketProvider
+    private readonly bucketProvider: BucketProvider,
+    private readonly vectorRepository: VectorRepository
   ) {}
 
-  async execute({
-    objectKey,
-    pineconeApiKey
-  }: ProcessNewsEmbeddingsRequest): Promise<void> {
+  async execute({ objectKey }: ProcessNewsEmbeddingsRequest): Promise<void> {
     const newsJson = await this.bucketProvider.getObject(objectKey)
 
     const parsedData = this.validateS3Data(newsJson)
@@ -60,12 +44,9 @@ export class ProcessNewsEmbeddingsUseCase {
       throw new Error('No articles were successfully processed for embeddings')
     }
 
-    await this.saveToPinecone({
-      pineconeApiKey,
-      vectors
-    })
+    await this.vectorRepository.upsert(vectors)
 
-    logger.info('All articles stored in Pinecone', {
+    logger.info('All articles stored in vector database', {
       processedCount: vectors.length,
       totalArticles: articles.length,
       successRate: `${Math.round((vectors.length / articles.length) * 100)}%`
@@ -76,8 +57,8 @@ export class ProcessNewsEmbeddingsUseCase {
     articles: NewsArticle[],
     objectKey: string,
     concurrency: number = 2
-  ): Promise<Vector[]> {
-    const vectors: Vector[] = []
+  ): Promise<VectorRecord[]> {
+    const vectors: VectorRecord[] = []
 
     for (let i = 0; i < articles.length; i += concurrency) {
       const batch = articles.slice(i, i + concurrency)
@@ -172,24 +153,6 @@ export class ProcessNewsEmbeddingsUseCase {
     }
 
     throw lastError || new Error('Max retries exceeded')
-  }
-
-  private async saveToPinecone(params: {
-    pineconeApiKey: string
-    vectors: Vectors
-  }): Promise<void> {
-    const pinecone = new Pinecone({
-      apiKey: params.pineconeApiKey as string
-    })
-
-    const index = pinecone.index('ai-content-pipe')
-
-    await index.upsert(params.vectors)
-
-    logger.info('Batch saved vectors to Pinecone', {
-      count: params.vectors.length,
-      vectorIds: params.vectors.map((v) => v.id)
-    })
   }
 
   private validateS3Data(data: unknown): NewsArticle[] {
