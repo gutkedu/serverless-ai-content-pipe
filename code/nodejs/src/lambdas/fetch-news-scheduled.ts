@@ -7,7 +7,7 @@ import { z } from 'zod'
 const logger = getLogger()
 
 const schema = z.object({
-  topic: z.string().min(2).max(100).default('tech'),
+  topic: z.string().min(2).max(100).default('Artificial Intelligence'),
   page: z.number().min(1).default(1),
   pageSize: z.number().min(1).max(100).default(10)
 })
