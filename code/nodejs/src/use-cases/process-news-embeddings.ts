@@ -4,6 +4,7 @@ import { NewsArticle } from '@/providers/news-api/news-api-dto.js'
 import { VectorRecord } from '@/repositories/types/vector-repository-dto.js'
 import { VectorRepository } from '@/repositories/vector-repository.js'
 import { getLogger } from '@/shared/logger/get-logger.js'
+import { createHash } from 'crypto'
 
 const logger = getLogger()
 
@@ -71,7 +72,7 @@ export class ProcessNewsEmbeddingsUseCase {
 
       const batchPromises = batch.map(async (article, batchIndex) => {
         const articleIndex = i + batchIndex
-        const vectorId = `${objectKey}-${articleIndex}`
+        const vectorId = this.generateUniqueVectorId(article)
 
         try {
           const textToEmbed = `${article.title}\n\n${article.description}\n\n${
@@ -112,6 +113,7 @@ export class ProcessNewsEmbeddingsUseCase {
           logger.info('Article processed successfully', {
             vectorId: result.value.id,
             title: result.value.metadata.title,
+            url: result.value.metadata.url,
             articleIndex: i + batchIndex + 1
           })
         }
@@ -153,6 +155,15 @@ export class ProcessNewsEmbeddingsUseCase {
     }
 
     throw lastError || new Error('Max retries exceeded')
+  }
+
+  private generateUniqueVectorId(article: NewsArticle): string {
+    // Use article URL as the primary identifier for deduplication
+    const urlHash = createHash('sha256')
+      .update(article.url)
+      .digest('hex')
+      .substring(0, 16) // Use first 16 characters for shorter IDs
+    return `article-${urlHash}`
   }
 
   private validateS3Data(data: unknown): NewsArticle[] {
