@@ -1,0 +1,17 @@
+{
+  "serverlessConsole.services": [
+    {
+      "type": "cloudformation",
+      "title": "ai-content-pipe",
+      "timeOffsetInMs": 0,
+      "awsProfile": "gutkedu-terraform",
+      "stacks": [
+        {
+          "region": "us-east-1",
+          "stackName": "AiContentPipeStatelessStack",
+          "stage": "dev"
+        }
+      ]
+    }
+  ]
+}

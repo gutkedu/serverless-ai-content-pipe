@@ -1,7 +1,7 @@
 import { getLogger } from '@/shared/logger/get-logger.js'
 import { S3Handler } from 'aws-lambda'
-import { getParameter } from '@aws-lambda-powertools/parameters/ssm'
 import { makeProcessNewsEmbeddings } from '@/use-cases/factories/make-process-news-embeddings.js'
+import { fetchPineconeApiKey } from '@/shared/parameters/fetch-pinecone-apikey.js'
 
 const logger = getLogger()
 
@@ -16,19 +16,7 @@ export const processNewsEmbeddingsHandler: S3Handler = async (
       requestId: context.awsRequestId
     })
 
-    const pineconeApiKey = await getParameter(
-      process.env.PINECONE_API_KEY_PARAM as string,
-      {
-        decrypt: true,
-        maxAge: 15 * 60 // 15 minutes cache
-      }
-    )
-
-    if (!pineconeApiKey) {
-      const errorMessage = 'Pinecone API key not found in SSM Parameter Store'
-      logger.error(errorMessage)
-      throw new Error(errorMessage)
-    }
+    const pineconeApiKey = await fetchPineconeApiKey()
 
     const useCase = makeProcessNewsEmbeddings(pineconeApiKey)
 

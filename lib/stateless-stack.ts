@@ -46,7 +46,14 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         ),
         BUCKET_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.MAIN_BUCKET),
         EVENT_BUS_NAME: cdk.Fn.importValue(StatefulStackExportsEnum.EVENT_BUS),
+        FROM_EMAIL_PARAM: cdk.Fn.importValue(
+          StatefulStackExportsEnum.FROM_EMAIL_PARAM
+        ),
+        DEFAULT_TO_EMAIL_PARAM: cdk.Fn.importValue(
+          StatefulStackExportsEnum.DEFAULT_TO_EMAIL_PARAM
+        ),
         POWERTOOLS_SERVICE_NAME: "ai-content-pipe",
+        BEDROCK_MODEL_ID: "amazon.nova-micro-v1:0",
       },
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
@@ -79,7 +86,6 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         bundling: {
           minify: true,
           sourceMap: true,
-          //externalModules: ["aws-sdk"],
           format: OutputFormat.ESM,
         },
       }
@@ -161,12 +167,11 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         environment: {
           ...globalLambdaConfigs.environment,
         },
-
         bundling: {
           minify: true,
           sourceMap: true,
           format: OutputFormat.CJS,
-          externalModules: ["@pinecone-database/pinecone"],
+          externalModules: ["@pinecone-database/pinecone", "zod"],
         },
       }
     );
@@ -218,6 +223,77 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       );
     }
 
+    const generateContentAgent = new nodeLambda.NodejsFunction(
+      this,
+      "GenerateContentAgentFunction",
+      {
+        handler: "generateContentAgentHandler",
+        entry: path.join(
+          __dirname,
+          "../code/nodejs/src/lambdas/generate-content-agent.ts"
+        ),
+        runtime: globalLambdaConfigs.runtime,
+        architecture: globalLambdaConfigs.architecture,
+        memorySize: 1024,
+        timeout: cdk.Duration.minutes(5),
+        layers: [
+          // Only PowerTools layer - bundle all other dependencies
+          lambda.LayerVersion.fromLayerVersionArn(
+            this,
+            "PowertoolsTypeScriptLayerForContentAgent",
+            "arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:34"
+          ),
+        ],
+        environment: {
+          ...globalLambdaConfigs.environment,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          format: OutputFormat.CJS,
+          // Bundle everything - don't use external modules for this Lambda
+        },
+      }
+    );
+
+    if (generateContentAgent.role) {
+      // SSM and SES permissions
+      generateContentAgent.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            "ssm:GetParameter",
+            "kms:Decrypt",
+            "ses:SendEmail",
+            "ses:SendRawEmail",
+          ],
+          resources: [
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/pinecone-api-key",
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/from-email",
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/default-to-email",
+            "arn:aws:kms:*:*:key/*",
+            "arn:aws:ses:*:*:identity/*",
+          ],
+        })
+      );
+
+      // Bedrock permissions for content generation
+      generateContentAgent.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            "bedrock:InvokeModel",
+            "bedrock:GetFoundationModel",
+            "bedrock:ListFoundationModels",
+          ],
+          resources: [
+            "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0",
+            "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1",
+            "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0",
+            "arn:aws:bedrock:us-east-1::foundation-model/*", // Allow other foundational models
+          ],
+        })
+      );
+    }
+
     /**
      * EventBridge Scheduler for Fetch News Lambda
      */
@@ -254,5 +330,40 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         state: "ENABLED",
       }
     );
+
+    /**
+     * API Gateway for Content Generation Agent
+     */
+    const contentApiGateway = new apigateway.RestApi(
+      this,
+      "ContentGenerationApi",
+      {
+        restApiName: "AI Content Pipe - Content Generation API",
+        description:
+          "API for triggering content generation and email distribution",
+        defaultCorsPreflightOptions: {
+          allowOrigins: apigateway.Cors.ALL_ORIGINS,
+          allowMethods: apigateway.Cors.ALL_METHODS,
+          allowHeaders: ["Content-Type", "Authorization"],
+        },
+      }
+    );
+
+    const generateContentIntegration = new apigateway.LambdaIntegration(
+      generateContentAgent,
+      {
+        proxy: true, // Enable Lambda proxy integration (recommended)
+        allowTestInvoke: true, // Allow testing from AWS Console
+      }
+    );
+
+    const generateContentResource =
+      contentApiGateway.root.addResource("generate-content");
+    generateContentResource.addMethod("POST", generateContentIntegration);
+
+    new cdk.CfnOutput(this, "ContentGenerationApiUrl", {
+      value: contentApiGateway.url,
+      description: "API Gateway endpoint URL for content generation",
+    });
   }
 }

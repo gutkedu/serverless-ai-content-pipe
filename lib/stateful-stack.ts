@@ -56,5 +56,34 @@ export class AiContentPipeStatefulStack extends cdk.Stack {
       exportName: StatefulStackExportsEnum.PINECONE_API_KEY_PARAM,
       description: "SSM Parameter name for Pinecone API key",
     });
+
+    // SES Configuration - SSM Parameters
+    const fromEmailParam = new ssm.StringParameter(this, "FromEmailParam", {
+      parameterName: "/ai-content-pipe/from-email",
+      stringValue: "noreply@yourdomain.com", // Replace with your verified email
+      description: "From email address for SES (must be verified in SES)",
+    });
+
+    const defaultToEmailParam = new ssm.StringParameter(
+      this,
+      "DefaultToEmailParam",
+      {
+        parameterName: "/ai-content-pipe/default-to-email",
+        stringValue: "your-email@example.com", // Replace with default recipient
+        description: "Default recipient email address",
+      }
+    );
+
+    new cdk.CfnOutput(this, "FromEmailParamName", {
+      value: fromEmailParam.parameterName,
+      exportName: StatefulStackExportsEnum.FROM_EMAIL_PARAM,
+      description: "SSM Parameter name for From Email",
+    });
+
+    new cdk.CfnOutput(this, "DefaultToEmailParamName", {
+      value: defaultToEmailParam.parameterName,
+      exportName: StatefulStackExportsEnum.DEFAULT_TO_EMAIL_PARAM,
+      description: "SSM Parameter name for Default To Email",
+    });
   }
 }
