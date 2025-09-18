@@ -68,10 +68,6 @@ export class GenerateContentForEmailUseCase implements ToolExecutor {
   async execute(
     request: ContentGenerationRequest
   ): Promise<GeneratedEmailContent> {
-    logger.info('Starting function calling content generation for email', {
-      request
-    })
-
     try {
       const prompt = this.buildAgentPrompt(request)
       const toolDefinitions = this.toolsFactory.getToolDefinitions()
@@ -114,36 +110,12 @@ export class GenerateContentForEmailUseCase implements ToolExecutor {
   private buildAgentPrompt(request: ContentGenerationRequest): string {
     const maxResults = request.maxResults || 5
 
-    return `You are a professional content editor. Your task is to create and send a ${
-      request.contentType
-    } about "${request.topic}".
-
-Please follow these steps:
-
-1. First, use the pinecone_search tool to find relevant content about "${
+    return `Search for articles about "${
       request.topic
-    }". Search for up to ${maxResults} results.
-
-2. Based on the search results, create a compelling ${request.contentType} that:
-   - Synthesizes the most important information from the sources
-   - Is well-structured and engaging for email readers
-   - Uses proper HTML formatting for better presentation
-   - Includes a clear and descriptive subject line
-   - References the sources naturally in the content
-
-3. Finally, use the send_email tool to send the generated content to these recipients: ${request.recipients.join(
+    }" using pinecone_search tool with maxResults: ${maxResults}. After getting results, create and send newsletter email to: ${request.recipients.join(
       ', '
-    )}
+    )}.
 
-Requirements:
-- Content Type: ${request.contentType}
-- Topic: ${request.topic}
-- Recipients: ${request.recipients.join(', ')}
-- Use HTML format for the email content
-- Create an engaging subject line that reflects the ${
-      request.contentType
-    } about ${request.topic}
-
-Please execute these steps and confirm when the email has been sent successfully.`
+Use pinecone_search now.`
   }
 }

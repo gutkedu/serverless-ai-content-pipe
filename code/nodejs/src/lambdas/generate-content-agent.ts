@@ -1,5 +1,10 @@
 import { getLogger } from '@/shared/logger/get-logger.js'
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
+import {
+  APIGatewayProxyEvent,
+  APIGatewayProxyHandler,
+  APIGatewayProxyResult,
+  Context
+} from 'aws-lambda'
 import { makeGenerateContentForEmailUseCase } from '@/use-cases/factories/make-generate-content-for-email.js'
 import { fetchPineconeApiKey } from '@/shared/parameters/fetch-pinecone-apikey.js'
 import z from 'zod'
@@ -18,27 +23,19 @@ const schema = z.object({
   maxResults: z.number().min(1).max(100).default(5)
 })
 
-export const generateContentAgentHandler = async (
-  event: APIGatewayProxyEvent
+export const generateContentAgentHandler: APIGatewayProxyHandler = async (
+  event: APIGatewayProxyEvent,
+  context: Context
 ): Promise<APIGatewayProxyResult> => {
-  logger.info('Phase 3 - Content generation Lambda triggered', {
-    httpMethod: event.httpMethod,
-    path: event.path,
-    headers: event.headers
-  })
+  logger.addContext(context)
 
   const pineconeApiKey = await fetchPineconeApiKey()
 
   const useCase = makeGenerateContentForEmailUseCase(pineconeApiKey)
 
   try {
-    // Parse request body from API Gateway event
     const requestBody = event.body ? JSON.parse(event.body) : {}
     const request = schema.parse(requestBody)
-
-    if (!request.recipients.length) {
-      throw new Error('At least one recipient email is required')
-    }
 
     logger.info('Executing content generation with agent', { request })
 
