@@ -11,6 +11,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import { S3EventSource } from "aws-cdk-lib/aws-lambda-event-sources";
+import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import { StatefulStackExportsEnum } from "./enums/exports-enum";
 
 export class AiContentPipeStatelessStack extends cdk.Stack {
@@ -24,7 +25,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       this,
       "NodejsDepsLambdaLayer",
       {
-        code: lambda.Code.fromAsset("code/nodejs/layers/deps"),
+        code: lambda.Code.fromAsset("../backend/nodejs/layers/deps"),
         compatibleRuntimes: [
           lambda.Runtime.NODEJS_20_X,
           lambda.Runtime.NODEJS_22_X,
@@ -80,7 +81,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         handler: "fetchNewsScheduledHandler",
         entry: path.join(
           __dirname,
-          "../code/nodejs/src/lambdas/fetch-news-scheduled.ts"
+          "../../backend/nodejs/src/lambdas/fetch-news-scheduled.ts"
         ),
         ...globalLambdaConfigs,
         bundling: {
@@ -124,7 +125,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         handler: "createPineconeIndexHandler",
         entry: path.join(
           __dirname,
-          "../code/nodejs/src/lambdas/infra/create-pinecone-index.ts"
+          "../../backend/nodejs/src/lambdas/infra/create-pinecone-index.ts"
         ),
         ...globalLambdaConfigs,
         environment: {
@@ -158,7 +159,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         handler: "processNewsEmbeddingsHandler",
         entry: path.join(
           __dirname,
-          "../code/nodejs/src/lambdas/process-news-embeddings.ts"
+          "../../backend/nodejs/src/lambdas/process-news-embeddings.ts"
         ),
         events: [], // refer below
         ...globalLambdaConfigs,
@@ -223,6 +224,92 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
       );
     }
 
+    /**
+     * Bedrock Agent Action Group Lambdas
+     */
+
+    // Pinecone search action Lambda
+    const pineconeActionLambda = new nodeLambda.NodejsFunction(
+      this,
+      "BedrockAgentPineconeActionFunction",
+      {
+        handler: "handler",
+        entry: path.join(
+          __dirname,
+          "../../backend/nodejs/src/lambdas/bedrock-agent-actions/pinecone-search.ts"
+        ),
+        runtime: globalLambdaConfigs.runtime,
+        architecture: globalLambdaConfigs.architecture,
+        memorySize: 512,
+        timeout: cdk.Duration.minutes(2),
+        environment: {
+          ...globalLambdaConfigs.environment,
+          // Pinecone API key will be retrieved from SSM in Lambda code
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          format: OutputFormat.CJS,
+        },
+      }
+    );
+
+    // Email action Lambda
+    const emailActionLambda = new nodeLambda.NodejsFunction(
+      this,
+      "BedrockAgentEmailActionFunction",
+      {
+        handler: "handler",
+        entry: path.join(
+          __dirname,
+          "../../backend/nodejs/src/lambdas/bedrock-agent-actions/send-email.ts"
+        ),
+        runtime: globalLambdaConfigs.runtime,
+        architecture: globalLambdaConfigs.architecture,
+        memorySize: 512,
+        timeout: cdk.Duration.minutes(2),
+        environment: {
+          ...globalLambdaConfigs.environment,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          format: OutputFormat.CJS,
+        },
+      }
+    );
+
+    // Permissions for Pinecone action Lambda
+    if (pineconeActionLambda.role) {
+      pineconeActionLambda.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter", "kms:Decrypt"],
+          resources: [
+            "arn:aws:ssm:*:*:parameter/ai-content-pipe/pinecone-api-key",
+          ],
+        })
+      );
+
+      pineconeActionLambda.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["bedrock:InvokeModel"],
+          resources: [
+            "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1",
+          ],
+        })
+      );
+    }
+
+    // Permissions for Email action Lambda
+    if (emailActionLambda.role) {
+      emailActionLambda.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ses:SendEmail", "ses:SendRawEmail"],
+          resources: ["*"],
+        })
+      );
+    }
+
     const generateContentAgent = new nodeLambda.NodejsFunction(
       this,
       "GenerateContentAgentFunction",
@@ -230,7 +317,7 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
         handler: "generateContentAgentHandler",
         entry: path.join(
           __dirname,
-          "../code/nodejs/src/lambdas/generate-content-agent.ts"
+          "../../backend/nodejs/src/lambdas/generate-content-agent.ts"
         ),
         runtime: globalLambdaConfigs.runtime,
         architecture: globalLambdaConfigs.architecture,
@@ -364,6 +451,185 @@ export class AiContentPipeStatelessStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ContentGenerationApiUrl", {
       value: contentApiGateway.url,
       description: "API Gateway endpoint URL for content generation",
+    });
+
+    // Allow Bedrock Agent to invoke the Lambda functions
+    pineconeActionLambda.addPermission("BedrockAgentInvokePineconeAction", {
+      principal: new iam.ServicePrincipal("bedrock.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceAccount: this.account,
+    });
+
+    emailActionLambda.addPermission("BedrockAgentInvokeEmailAction", {
+      principal: new iam.ServicePrincipal("bedrock.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceAccount: this.account,
+    });
+
+    /**
+     * Bedrock Agent for Content Generation
+     */
+
+    // IAM Role for Bedrock Agent
+    const agentRole = new iam.Role(this, "ContentGenerationAgentRole", {
+      assumedBy: new iam.ServicePrincipal("bedrock.amazonaws.com"),
+      description: "Role for Bedrock Agent to access required services",
+    });
+
+    // Permissions for Bedrock Agent
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel", "bedrock:GetFoundationModel"],
+        resources: [
+          "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0",
+          "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1",
+        ],
+      })
+    );
+
+    // S3 access for agent (if needed for knowledge base)
+    const agentBucket = s3.Bucket.fromBucketName(
+      this,
+      "MainBucketForAgent",
+      cdk.Fn.importValue(StatefulStackExportsEnum.MAIN_BUCKET)
+    );
+
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+        resources: [agentBucket.bucketArn, `${agentBucket.bucketArn}/*`],
+      })
+    );
+
+    // Lambda invocation permissions for action groups
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: [
+          pineconeActionLambda.functionArn,
+          emailActionLambda.functionArn,
+        ],
+      })
+    );
+
+    // Create the Bedrock Agent
+    const contentAgent = new bedrock.CfnAgent(this, "ContentGenerationAgent", {
+      agentName: "ai-content-pipe-agent",
+      agentResourceRoleArn: agentRole.roleArn,
+      foundationModel: "amazon.nova-micro-v1:0",
+      description: "Agent for generating and sending AI content newsletters",
+      instruction: `You are a content generation agent for an AI newsletter system.
+
+Your capabilities:
+1. Search for relevant articles using Pinecone vector database
+2. Generate newsletter content based on search results  
+3. Send newsletters via AWS SES
+
+When asked to create content:
+1. First, search for articles related to the topic using the pinecone_search tool
+2. Analyze the search results and create engaging newsletter content
+3. Send the newsletter to the specified recipients using the send_email tool
+
+Always be helpful, accurate, and create high-quality content that provides value to readers.`,
+
+      actionGroups: [
+        {
+          actionGroupName: "pinecone-actions",
+          description: "Actions for searching articles in Pinecone",
+          actionGroupExecutor: {
+            lambda: pineconeActionLambda.functionArn,
+          },
+          functionSchema: {
+            functions: [
+              {
+                name: "pinecone_search",
+                description:
+                  "Search for relevant articles in Pinecone vector database",
+                parameters: {
+                  query: {
+                    type: "string",
+                    description: "Search query for finding relevant articles",
+                    required: true,
+                  },
+                  maxResults: {
+                    type: "integer",
+                    description:
+                      "Maximum number of results to return (default: 5)",
+                    required: false,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        {
+          actionGroupName: "email-actions",
+          description: "Actions for sending emails via SES",
+          actionGroupExecutor: {
+            lambda: emailActionLambda.functionArn,
+          },
+          functionSchema: {
+            functions: [
+              {
+                name: "send_email",
+                description:
+                  "Send email newsletter to specified recipients via AWS SES",
+                parameters: {
+                  recipients: {
+                    type: "array",
+                    description:
+                      "Array of email addresses to send the newsletter to",
+                    required: true,
+                  },
+                  subject: {
+                    type: "string",
+                    description: "Subject line for the email newsletter",
+                    required: true,
+                  },
+                  body: {
+                    type: "string",
+                    description: "HTML content of the email newsletter",
+                    required: true,
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    // Create Agent Alias
+    const agentAlias = new bedrock.CfnAgentAlias(this, "ContentAgentAlias", {
+      agentId: contentAgent.attrAgentId,
+      agentAliasName: "prod",
+      description: "Production alias for content generation agent",
+    });
+
+    // Export Lambda ARNs for Bedrock Agent (keeping for any existing references)
+    new cdk.CfnOutput(this, "PineconeActionLambdaArn", {
+      value: pineconeActionLambda.functionArn,
+      description: "ARN of Pinecone action Lambda for Bedrock Agent",
+      exportName: "PineconeActionLambdaArn",
+    });
+
+    new cdk.CfnOutput(this, "EmailActionLambdaArn", {
+      value: emailActionLambda.functionArn,
+      description: "ARN of Email action Lambda for Bedrock Agent",
+      exportName: "EmailActionLambdaArn",
+    });
+
+    // Export Agent details
+    new cdk.CfnOutput(this, "BedrockAgentId", {
+      value: contentAgent.attrAgentId,
+      exportName: StatefulStackExportsEnum.BEDROCK_AGENT_ID,
+      description: "Bedrock Agent ID for content generation",
+    });
+
+    new cdk.CfnOutput(this, "BedrockAgentAliasId", {
+      value: agentAlias.attrAgentAliasId,
+      exportName: StatefulStackExportsEnum.BEDROCK_AGENT_ALIAS_ID,
+      description: "Bedrock Agent Alias ID",
     });
   }
 }
