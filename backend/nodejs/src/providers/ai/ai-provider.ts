@@ -23,6 +23,15 @@ export interface AIProvider {
   generateBedrockEmbedding(text: string): Promise<number[]>
 
   /**
+   * Generates content using the Converse API (for Nova and Llama models).
+   * This is the modern API that works with all current models.
+   * @param prompt The input text to generate content for.
+   * @param maxTokens Maximum number of tokens to generate.
+   * @returns A promise that resolves to the generated content.
+   */
+  generateWithConverse(prompt: string, maxTokens?: number): Promise<string>
+
+  /**
    * Executes function calling with tools.
    * @param request The function calling request with prompt and tools.
    * @param toolExecutor The executor that handles tool invocations.
