@@ -9,7 +9,7 @@ FUNCTION_URL="https://czschxbqagxdig24n2oyfkfele0avmjl.lambda-url.us-east-1.on.a
 PAYLOAD='{
   "topic": "Artificial Intelligence",
   "recipients": ["eduardo.pedogutkoski@gmail.com"],
-  "maxArticles": 5
+  "maxArticles": 20
 }'
 
 echo "🚀 Testing Newsletter Generator (Manual Orchestrator)"
