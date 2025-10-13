@@ -11,9 +11,10 @@ export class SESEmailProvider implements EmailProvider {
   private readonly client: SESClient
   private readonly fromEmail: string
 
-  constructor() {
+  constructor(fromEmail?: string) {
     this.client = ses()
-    this.fromEmail = process.env.FROM_EMAIL || 'noreply@yourdomain.com'
+    this.fromEmail =
+      fromEmail || process.env.FROM_EMAIL || 'noreply@yourdomain.com'
   }
 
   async sendEmail(to: string, subject: string, body: string): Promise<void> {

@@ -125,6 +125,82 @@ export class BedrockProvider implements AIProvider {
     }
   }
 
+  /**
+   * Generate content using Converse API (for Nova and Llama models)
+   * This is the modern API that works with all current models
+   */
+  async generateWithConverse(
+    prompt: string,
+    maxTokens = 4096
+  ): Promise<string> {
+    try {
+      logger.info('Invoking Bedrock model with Converse API', {
+        modelId: this.modelId,
+        promptLength: prompt.length
+      })
+
+      const command = new ConverseCommand({
+        modelId: this.modelId,
+        messages: [
+          {
+            role: 'user',
+            content: [{ text: prompt }]
+          }
+        ],
+        inferenceConfig: {
+          maxTokens,
+          temperature: 0.7,
+          topP: 0.9
+        }
+      })
+
+      const response = await this.client.send(command)
+
+      if (!response.output?.message?.content) {
+        throw new IntegrationError('Empty response from Bedrock', {
+          service: 'bedrock',
+          details: 'Response message content is empty'
+        })
+      }
+
+      // Extract text from content blocks
+      const textContent = response.output.message.content
+        .filter((block) => 'text' in block)
+        .map((block) => ('text' in block ? block.text : ''))
+        .join('\n')
+
+      if (!textContent) {
+        throw new IntegrationError('No text content in Bedrock response', {
+          service: 'bedrock',
+          details: 'Response contains no text blocks'
+        })
+      }
+
+      logger.info('Successfully generated content with Converse API', {
+        modelId: this.modelId,
+        responseLength: textContent.length
+      })
+
+      return textContent.trim()
+    } catch (error) {
+      logger.error('Error generating content with Converse API', {
+        error,
+        modelId: this.modelId,
+        promptLength: prompt.length
+      })
+
+      if (error instanceof IntegrationError) {
+        throw error
+      }
+
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      throw new IntegrationError('Failed to generate content from Bedrock', {
+        service: 'bedrock',
+        details: message
+      })
+    }
+  }
+
   async executeWithFunctionCalling(
     request: FunctionCallingRequest,
     toolExecutor: ToolExecutor
