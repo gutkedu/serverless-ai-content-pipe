@@ -1,0 +1,22 @@
+{
+    "RoleName": "AiContentPipeStatelessStac-BedrockAgentRole7C982E0C-itHNG1vthjTo",
+    "PolicyName": "BedrockAgentRoleDefaultPolicy1462CD5B",
+    "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Action": "bedrock:InvokeModel",
+                "Resource": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0",
+                "Effect": "Allow"
+            },
+            {
+                "Action": "lambda:InvokeFunction",
+                "Resource": [
+                    "arn:aws:lambda:us-east-1:396608768142:function:AiContentPipeStatelessSta-PineconeSearchAction7A62-SV7Tr7by5Z1U",
+                    "arn:aws:lambda:us-east-1:396608768142:function:AiContentPipeStatelessStac-SendEmailActionBB4741B8-aIl8WIB4E5CM"
+                ],
+                "Effect": "Allow"
+            }
+        ]
+    }
+}

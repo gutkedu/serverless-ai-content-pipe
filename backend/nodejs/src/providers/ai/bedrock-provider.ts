@@ -88,8 +88,12 @@ export class BedrockProvider implements AIProvider {
 
   async generateBedrockEmbedding(text: string): Promise<number[]> {
     try {
+      // Use Titan v1 (1536 dims) to match existing Pinecone index
+      const embeddingModelId =
+        process.env.EMBEDDING_MODEL_ID || 'amazon.titan-embed-text-v1'
+
       const command = new InvokeModelCommand({
-        modelId: 'amazon.titan-embed-text-v1',
+        modelId: embeddingModelId,
         contentType: 'application/json',
         accept: 'application/json',
         body: JSON.stringify({
