@@ -6,17 +6,17 @@
 FUNCTION_URL="https://czschxbqagxdig24n2oyfkfele0avmjl.lambda-url.us-east-1.on.aws/"
 
 # Test payload
-PAYLOAD='{
+PAYLOAD=''{
   "topic": "Artificial Intelligence",
-  "recipients": ["eduardo.pedogutkoski@gmail.com"],
+  "recipients": ["test+newsletter@example.com"],
   "maxArticles": 15
-}'
+}''
 
 echo "🚀 Testing Newsletter Generator (Manual Orchestrator)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Topic: Artificial Intelligence"
-echo "Recipients: eduardo.pedogutkoski@gmail.com"
-echo "Max Articles: 5"
+echo "Recipients: test+newsletter@example.com"
+echo "Max Articles: 15"
 echo ""
 echo "📡 Sending request to Function URL..."
 echo ""
